@@ -1016,15 +1016,32 @@ async function saveEditStudentDetails() {
 }
 
 async function renderDashboardView() {
+  // 1. Pastikan data siswa di memori sudah dimuat
+  if (!cachedStudents || cachedStudents.length === 0) {
+    if (typeof loadStudentsView === 'function') {
+      await loadStudentsView();
+    }
+  }
+
+  // 2. Handling elemen tanggal dengan aman
+  const dateInputEl = document.getElementById('dashboard-date-filter');
   const d = new Date();
   const realTodayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const targetDate = formatCleanDateLocal(document.getElementById('dashboard-date-filter').value) || realTodayStr;
-  document.getElementById('dashboard-date-filter').value = targetDate;
   
+  let rawDateVal = dateInputEl ? dateInputEl.value : realTodayStr;
+  const targetDate = formatCleanDateLocal(rawDateVal) || realTodayStr;
+
+  if (dateInputEl) {
+    dateInputEl.value = targetDate;
+  }
+
+  // 3. Ambil data dari IndexedDB & variabel lokal
   const queueRecords = await getAllQueueFromDB();
   const localHist = await getAllLocalHistoryFromDB();
-  
-  const rawRecords = [...fetchedTodayAttendance, ...fetchedAttendanceHistory, ...localHist, ...queueRecords].filter(r => formatCleanDateLocal(r.tanggal) === targetDate);
+
+  const rawRecords = [...fetchedTodayAttendance, ...fetchedAttendanceHistory, ...localHist, ...queueRecords]
+    .filter(r => formatCleanDateLocal(r.tanggal) === targetDate);
+
   const activeStudents = cachedStudents.filter(s => s.active === undefined || s.active === true);
 
   let totalStd = activeStudents.length;
@@ -1032,38 +1049,47 @@ async function renderDashboardView() {
 
   activeStudents.forEach(std => {
     const rec = rawRecords.find(r => String(r.id_siswa).trim().toUpperCase() === String(std.id_siswa).trim().toUpperCase());
-    
+
     if (!rec) {
       countAlpa++;
     } else {
       const stAkhir = String(rec.status_akhir || rec.status_presensi || "ALPA").trim().toUpperCase();
+      const stPagi = String(rec.status_pagi || "").trim().toUpperCase();
 
-      if (stAkhir === "HADIR") countHadir++;
+      if (stAkhir === "HADIR" || stPagi === "HADIR") countHadir++;
       else if (stAkhir === "ALPA") countAlpa++;
       else if (stAkhir === "BOLOS") countBolos++;
       else if (stAkhir === "IZIN") countIzin++;
       else if (stAkhir === "SAKIT") countSakit++;
       else if (stAkhir === "KEGIATAN") countKegiatan++;
 
-      const stPagi = String(rec.status_pagi || "").trim().toUpperCase();
-      if (stPagi === "TERLAMBAT") countTerlambat++;
+      if (stPagi === "TERLAMBAT" || stAkhir === "TERLAMBAT") {
+        countTerlambat++;
+        countHadir++; // Terlambat tetap masuk hitungan hadir
+      }
     }
   });
 
   const pctHadir = totalStd > 0 ? Math.round((countHadir / totalStd) * 100) : 0;
 
-  document.getElementById('dash-pct-total').innerText = `${pctHadir}%`;
-  document.getElementById('dash-pct-sub').innerText = `${countHadir} dari ${totalStd} Siswa Hadir`;
-  
-  document.getElementById('dash-count-hadir').innerText = countHadir;
-  document.getElementById('dash-count-terlambat').innerText = countTerlambat;
-  document.getElementById('dash-count-alpa').innerText = countAlpa;
-  document.getElementById('dash-count-bolos').innerText = countBolos;
-  document.getElementById('dash-count-izinsakit').innerText = countIzin + countSakit;
-  document.getElementById('dash-count-kegiatan').innerText = countKegiatan;
+  // 4. Update UI dengan Pengecekan Aman (Pencegahan Crash jika ID tidak ditemukan)
+  const setElText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = val;
+  };
 
-  renderDashboardClassSummary(rawRecords);
-  renderDashboardStudentTable();
+  setElText('dash-pct-total', `${pctHadir}%`);
+  setElText('dash-pct-sub', `${countHadir} dari ${totalStd} Siswa Hadir`);
+  setElText('dash-count-hadir', countHadir);
+  setElText('dash-count-terlambat', countTerlambat);
+  setElText('dash-count-alpa', countAlpa);
+  setElText('dash-count-bolos', countBolos);
+  setElText('dash-count-izinsakit', countIzin + countSakit);
+  setElText('dash-count-kegiatan', countKegiatan);
+
+  // 5. Jalankan fungsi ringkasan kelas & tabel
+  if (typeof renderDashboardClassSummary === 'function') renderDashboardClassSummary(rawRecords);
+  if (typeof renderDashboardStudentTable === 'function') renderDashboardStudentTable();
 }
 
 function renderDashboardClassSummary(rawRecords) {
