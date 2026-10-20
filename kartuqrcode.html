@@ -26,7 +26,7 @@ body{margin:0;font-family:Arial,sans-serif;background:#f3f6fa;color:#172033}
 .status{margin-top:10px;font-size:12px;color:#64748b;font-weight:bold}
 .settings{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .logo-box{background:#f8fafc;border:1px dashed #94a3b8;border-radius:12px;padding:12px}
-.logo-preview{height:90px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;background:#fff;border-radius:9px;border:1px solid #e2e8f0;overflow:hidden}
+.logo-preview{height:90px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;background:#fff;border-radius:99px;border:1px solid #e2e8f0;overflow:hidden}
 .logo-preview img{max-width:100%;max-height:82px;object-fit:contain}
 .logo-preview span{color:#94a3b8;font-size:11px}
 .student-list{margin-top:14px;background:#fff;border:1px solid #dbe4ef;border-radius:15px;padding:12px;box-shadow:0 5px 20px #0f28500d}
@@ -146,9 +146,9 @@ body{margin:0;font-family:Arial,sans-serif;background:#f3f6fa;color:#172033}
 </div>
 
 <script>
-// SUPABASE CLIENT INITIALIZATION
-const SUPABASE_URL = "https://nbwpnhshhpfqtmbwewgk.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5id3BuaHNoaHBmcXRtYndld2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTQ1ODUsImV4cCI6MjEwNzk5MDU4NX0.2Ah6o8svWPMDEI1O3zOxytNyqBIjED7GXTxowNm1Ai4";
+// SUPABASE CLIENT INITIALIZATION (Membaca dari localStorage terpusat)
+const SUPABASE_URL = localStorage.getItem("SUPABASE_URL") || "https://nbwpnhshhpfqtmbwewgk.supabase.co";
+const SUPABASE_ANON_KEY = localStorage.getItem("SUPABASE_ANON_KEY") || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5id3BuaHNoaHBmcXRtYndld2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTQ1ODUsImV4cCI6MjEwNzk5MDU4NX0.2Ah6o8svWPMDEI1O3zOxytNyqBIjED7GXTxowNm1Ai4";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let siswa = [], selected = new Set(), logoKiriData = '', logoKananData = '';
@@ -170,7 +170,6 @@ function setStatus(t, bad = false){ const e = document.getElementById('status');
 async function muatDataDanPengaturan() {
   setStatus('Memuat data siswa & pengaturan dari Server...');
   try {
-    // 1. Ambil Data Siswa Aktif dari Supabase
     const { data: stdData, error: stdError } = await supabaseClient
       .from('siswa')
       .select('*');
@@ -189,7 +188,6 @@ async function muatDataDanPengaturan() {
       }))
       .sort((a, b) => a.nama.localeCompare(b.nama));
 
-    // 2. Ambil Pengaturan dari Tabel 'pengaturan'
     const { data: cfgData } = await supabaseClient.from('pengaturan').select('*');
     const s = {};
     if (cfgData) {
@@ -200,7 +198,6 @@ async function muatDataDanPengaturan() {
     document.getElementById('warna').value = s.WARNA_KARTU || 'biru';
     document.getElementById('bingkai').value = s.BINGKAI_KARTU || 'ganda';
 
-    // 3. Ambil Logo dari LocalStorage (Prioritas Utama) atau Public Supabase Storage
     const localKiri = localStorage.getItem("LOCAL_LOGO_KIRI");
     const localKanan = localStorage.getItem("LOCAL_LOGO_KANAN");
 
@@ -286,7 +283,6 @@ async function simpanPengaturan() {
     const warna = document.getElementById('warna').value;
     const bingkai = document.getElementById('bingkai').value;
 
-    // 1. Simpan Teks Pengaturan ke Supabase
     const settingsArray = [
       { kunci: 'SCHOOL_NAME', nilai: schoolName },
       { kunci: 'WARNA_KARTU', nilai: warna },
@@ -296,7 +292,6 @@ async function simpanPengaturan() {
     await supabaseClient.from('pengaturan').upsert(settingsArray);
     localStorage.setItem("SCHOOL_NAME", schoolName);
 
-    // 2. Unggah Logo Kiri ke Storage Bucket jika ada file baru
     if (logoKiriFile) {
       try {
         await supabaseClient.storage
@@ -305,7 +300,6 @@ async function simpanPengaturan() {
       } catch(e) {}
     }
 
-    // 3. Unggah Logo Kanan ke Storage Bucket jika ada file baru
     if (logoKananFile) {
       try {
         await supabaseClient.storage
@@ -318,7 +312,6 @@ async function simpanPengaturan() {
     logoKiriFile = null;
     logoKananFile = null;
 
-    // Refresh preview tanpa menghilangkan data Base64 lokal
     buatPreview();
 
   } catch(e) {

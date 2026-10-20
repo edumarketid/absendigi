@@ -128,9 +128,9 @@ body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#172033}
 </div>
 
 <script>
-// SUPABASE CLIENT INITIALIZATION
-const SUPABASE_URL = "https://nbwpnhshhpfqtmbwewgk.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5id3BuaHNoaHBmcXRtYndld2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTQ1ODUsImV4cCI6MjEwNzk5MDU4NX0.2Ah6o8svWPMDEI1O3zOxytNyqBIjED7GXTxowNm1Ai4";
+// SUPABASE CLIENT INITIALIZATION (Membaca dari localStorage terpusat)
+const SUPABASE_URL = localStorage.getItem("SUPABASE_URL") || "https://nbwpnhshhpfqtmbwewgk.supabase.co";
+const SUPABASE_ANON_KEY = localStorage.getItem("SUPABASE_ANON_KEY") || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5id3BuaHNoaHBmcXRtYndld2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTQ1ODUsImV4cCI6MjEwNzk5MDU4NX0.2Ah6o8svWPMDEI1O3zOxytNyqBIjED7GXTxowNm1Ai4";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let logoData = ''; 
@@ -146,7 +146,6 @@ function today(){ return new Date().toISOString().slice(0,10); }
 
 async function loadSettings(){
   try {
-    // 1. Ambil Data Siswa untuk dropdown kelas
     const { data: stdData } = await supabaseClient.from('siswa').select('*');
     allStudentsList = (stdData || []).map(s => ({
       id_siswa: s.ID_SISWA || s.id_siswa,
@@ -159,7 +158,6 @@ async function loadSettings(){
     const classes = [...new Set(allStudentsList.map(std => std.kelas))].filter(Boolean).sort();
     fill('kelas', classes, 'Semua Kelas');
 
-    // 2. Ambil Pengaturan dari Supabase
     const { data: cfgData } = await supabaseClient.from('pengaturan').select('*');
     const s = {};
     if (cfgData) {
@@ -177,7 +175,6 @@ async function loadSettings(){
     el('nipKepala').value = principalNip;
     el('tempatTtd').value = tempatTtd;
 
-    // 3. Ambil Logo Kop dari LocalStorage / Supabase Storage
     const localKop = localStorage.getItem("LOCAL_LOGO_KOP");
     if (localKop) {
       logoData = localKop;
@@ -326,7 +323,6 @@ async function buatLaporan(){
       periodeLabel = `Tahun Ajaran ${yearVal}`;
     }
 
-    // Ambil Data Absensi Harian dari Supabase
     let query = supabaseClient.from('absensi_harian').select('*').gte('TANGGAL', startDate).lte('TANGGAL', endDate);
     if (selectedClass) {
       query = query.eq('KELAS', selectedClass);
@@ -337,7 +333,6 @@ async function buatLaporan(){
 
     el('loading').textContent = '';
 
-    // Filter daftar siswa sesuai kelas
     const filteredStudents = allStudentsList.filter(s => !selectedClass || s.kelas === selectedClass);
 
     let reportRows = [];
@@ -375,7 +370,6 @@ async function buatLaporan(){
       summary.persentase = filteredStudents.length > 0 ? (totalHadirVal / filteredStudents.length) * 100 : 0;
 
     } else {
-      // Rekapitulasi Periode
       filteredStudents.forEach(std => {
         const stdLogs = (attendanceLogs || []).filter(a => String(a.ID_SISWA || a.id_siswa).trim().toUpperCase() === String(std.id_siswa).trim().toUpperCase());
         
