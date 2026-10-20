@@ -1,6 +1,17 @@
-// SUPABASE CLIENT INITIALIZATION
-const SUPABASE_URL = "https://nbwpnhshhpfqtmbwewgk.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5id3BuaHNoaHBmcXRtYndld2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTQ1ODUsImV4cCI6MjEwNzk5MDU4NX0.2Ah6o8svWPMDEI1O3zOxytNyqBIjED7GXTxowNm1Ai4";
+// SUPABASE CLIENT INITIALIZATION (Pusat Kendali via localStorage)
+const DEFAULT_SUPABASE_URL = "https://nbwpnhshhpfqtmbwewgk.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5id3BuaHNoaHBmcXRtYndld2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTQ1ODUsImV4cCI6MjEwNzk5MDU4NX0.2Ah6o8svWPMDEI1O3zOxytNyqBIjED7GXTxowNm1Ai4";
+
+// Simpan kunci bawaan ke localStorage jika belum pernah diset
+if (!localStorage.getItem("SUPABASE_URL")) {
+  localStorage.setItem("SUPABASE_URL", DEFAULT_SUPABASE_URL);
+}
+if (!localStorage.getItem("SUPABASE_ANON_KEY")) {
+  localStorage.setItem("SUPABASE_ANON_KEY", DEFAULT_SUPABASE_ANON_KEY);
+}
+
+const SUPABASE_URL = localStorage.getItem("SUPABASE_URL");
+const SUPABASE_ANON_KEY = localStorage.getItem("SUPABASE_ANON_KEY");
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let html5QrCode = null, isCameraActive = false, db = null, cachedStudents = [];
