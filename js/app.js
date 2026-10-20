@@ -175,6 +175,8 @@ function renderMenuModalGrid() {
   const isAdmin = (currentUserRole === "ADMIN");
 
   const items = [
+    { label: "Ibadah Siswa", icon: "fa-mosque", color: "emerald", action: "window.open('https://mengaji.smknegeri1wakatobi.sch.id', '_blank')", adminOnly: false },
+        { label: "Absensi Guru", icon: "fa-chalkboard-user", color: "blue", action: "window.open('https://s.id/AbsensiGuruSMKN1Wakatobi', '_blank')", adminOnly: false },
     { label: "Unggah Kolektif", icon: "fa-file-excel", color: "emerald", action: "toggleView('upload-batch')", adminOnly: true },
     { label: "Tambah Siswa", icon: "fa-user-plus", color: "teal", action: "toggleAddStudentModal()", adminOnly: true },
     { label: "Edit Data Siswa", icon: "fa-user-pen", color: "indigo", action: "toggleView('edit-students')", adminOnly: true },
