@@ -35,7 +35,7 @@ async function renderDashboardView() {
       const stPagi = String(rec.status_pagi || "").trim().toUpperCase();
 
       if (stAkhir === "HADIR" || stPagi === "HADIR") countHadir++;
-      else if (stAkhir === "ALPA" || stAkhir === "ALPHA" || stAkhir === "A") countAlpa++;
+      else if (stAkhir === "ALPA") countAlpa++;
       else if (stAkhir === "BOLOS") countBolos++;
       else if (stAkhir === "IZIN") countIzin++;
       else if (stAkhir === "SAKIT") countSakit++;
@@ -548,7 +548,7 @@ async function sendTLClassSummaryWA() {
     let totalAlpa = 0;
     stdRecords.forEach(r => {
       const stAkhir = String(r.status_akhir || r.status_presensi || "").trim().toUpperCase();
-      if (stAkhir === "ALPA" || stAkhir === "ALPHA" || stAkhir === "A") totalAlpa++;
+      if (stAkhir === "ALPA") totalAlpa++;
     });
 
     let maxSeqTerlambat = 0, currentSeqTerlambat = 0;
@@ -617,7 +617,7 @@ async function renderTindakLanjutView() {
     let totalAlpa = 0;
     stdRecords.forEach(r => {
       const stAkhir = String(r.status_akhir || r.status_presensi || "").trim().toUpperCase();
-      if (stAkhir === "ALPA" || stAkhir === "ALPHA" || stAkhir === "A") totalAlpa++;
+      if (stAkhir === "ALPA") totalAlpa++;
     });
 
     let maxSeqTerlambat = 0, currentSeqTerlambat = 0;
