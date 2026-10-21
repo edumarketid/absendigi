@@ -156,10 +156,6 @@ async function syncQueueToGAS() {
       STATUS_PAGI: q.status_pagi || (q.sesi === "PAGI" ? q.status_presensi : null),
       JAM_SIANG: q.jam_siang || (q.sesi === "SIANG" ? q.jam : null),
       STATUS_SIANG: q.status_siang || (q.sesi === "SIANG" ? q.status_presensi : null),
-      JAM_DZUHUR: q.jam_dzuhur || (q.sesi === "DZUHUR" ? q.jam : null),
-      STATUS_DZUHUR: q.status_dzuhur || (q.sesi === "DZUHUR" ? q.status_presensi : null),
-      JAM_PENGAJIAN: q.jam_pengajian || (q.sesi === "PENGAJIAN" ? q.jam : null),
-      STATUS_PENGAJIAN: q.status_pengajian || (q.sesi === "PENGAJIAN" ? q.status_presensi : null),
       STATUS_AKHIR: q.status_akhir || q.status_presensi
     }));
 

@@ -428,23 +428,13 @@ async function setManualPresensiAction(idSiswa, status, targetDate) {
   let statusPagi = existing ? (existing.status_pagi || "") : "";
   let jamSiang = existing ? (existing.jam_siang || "") : "";
   let statusSiang = existing ? (existing.status_siang || "") : "";
-  let jamDzuhur = existing ? (existing.jam_dzuhur || "") : "";
-  let statusDzuhur = existing ? (existing.status_dzuhur || "") : "";
-  let jamPengajian = existing ? (existing.jam_pengajian || "") : "";
-  let statusPengajian = existing ? (existing.status_pengajian || "") : "";
-
+  
   if (selectedSessionFilter === "PAGI") {
     jamPagi = timeStr;
     statusPagi = status;
   } else if (selectedSessionFilter === "SIANG") {
     jamSiang = timeStr;
     statusSiang = status;
-  } else if (selectedSessionFilter === "DZUHUR") {
-    jamDzuhur = timeStr;
-    statusDzuhur = status;
-  } else if (selectedSessionFilter === "PENGAJIAN") {
-    jamPengajian = timeStr;
-    statusPengajian = status;
   }
 
   const statusAkhir = status;
@@ -462,10 +452,6 @@ async function setManualPresensiAction(idSiswa, status, targetDate) {
     jam_pagi: jamPagi,
     status_siang: statusSiang,
     jam_siang: jamSiang,
-    jam_dzuhur: jamDzuhur,
-    status_dzuhur: statusDzuhur,
-    jam_pengajian: jamPengajian,
-    status_pengajian: statusPengajian,
     status_akhir: statusAkhir,
     timestamp: Date.now()
   };

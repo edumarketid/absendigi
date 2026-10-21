@@ -134,23 +134,13 @@ async function onScanSuccess(text) {
       let statusPagi = existing ? (existing.status_pagi || "") : "";
       let jamSiang = existing ? (existing.jam_siang || "") : "";
       let statusSiang = existing ? (existing.status_siang || "") : "";
-      let jamDzuhur = existing ? (existing.jam_dzuhur || "") : "";
-      let statusDzuhur = existing ? (existing.status_dzuhur || "") : "";
-      let jamPengajian = existing ? (existing.jam_pengajian || "") : "";
-      let statusPengajian = existing ? (existing.status_pengajian || "") : "";
-
+      
       if (currentScanSession === "PAGI") {
         jamPagi = timeStr;
         statusPagi = computedStatus;
       } else if (currentScanSession === "SIANG") {
         jamSiang = timeStr;
         statusSiang = computedStatus;
-      } else if (currentScanSession === "DZUHUR") {
-        jamDzuhur = timeStr;
-        statusDzuhur = "HADIR";
-      } else if (currentScanSession === "PENGAJIAN") {
-        jamPengajian = timeStr;
-        statusPengajian = "HADIR";
       }
 
       let statusAkhir = computedStatus;
@@ -171,10 +161,6 @@ async function onScanSuccess(text) {
         jam_pagi: jamPagi,
         status_siang: statusSiang,
         jam_siang: jamSiang,
-        jam_dzuhur: jamDzuhur,
-        status_dzuhur: statusDzuhur,
-        jam_pengajian: jamPengajian,
-        status_pengajian: statusPengajian,
         status_akhir: statusAkhir,
         timestamp: Date.now()
       };
