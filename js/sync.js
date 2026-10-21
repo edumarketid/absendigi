@@ -16,10 +16,26 @@ async function autoDownloadMasterStudents(targetDateStr) {
 
   try {
     const { data: studentsData } = await supabaseClient.from('siswa').select('*');
-    const { data: attendanceData } = await supabaseClient
+    
+    // PERBAIKAN 1: Unduh seluruh riwayat absensi dari Supabase agar akumulasi di Tindak Lanjut akurat
+    const { data: allAttendanceData } = await supabaseClient
       .from('absensi_harian')
-      .select('*')
-      .eq('TANGGAL', targetDateStr);
+      .select('*');
+
+    // PERBAIKAN 2: Unduh data status tindak lanjut tersimpan dari Supabase
+    const { data: tlData } = await supabaseClient.from('tindak_lanjut').select('*');
+    if (tlData && Array.isArray(tlData)) {
+      const tlStore = {};
+      tlData.forEach(item => {
+        const idS = item.ID_SISWA || item.id_siswa;
+        tlStore[idS] = {
+          tanggal: item.TANGGAL || item.tanggal,
+          catatan: item.CATATAN || item.catatan,
+          kategori: item.KATEGORI || item.kategori
+        };
+      });
+      localStorage.setItem("TL_STATUS_STORE", JSON.stringify(tlStore));
+    }
 
     const { data: timeData } = await supabaseClient.from('pengaturan_waktu').select('*');
     if (timeData && Array.isArray(timeData)) {
@@ -85,8 +101,8 @@ async function autoDownloadMasterStudents(targetDateStr) {
       }
     }
 
-    if (attendanceData && Array.isArray(attendanceData)) {
-      fetchedTodayAttendance = attendanceData.map(a => {
+    if (allAttendanceData && Array.isArray(allAttendanceData)) {
+      const parsedAll = allAttendanceData.map(a => {
         const tgl = formatCleanDateLocal(a.TANGGAL || a.tanggal || targetDateStr);
         const idS = a.ID_SISWA || a.id_siswa;
         const logId = a.LOG_ID || a.log_id || `${tgl}_${idS}`;
@@ -106,12 +122,29 @@ async function autoDownloadMasterStudents(targetDateStr) {
           status_presensi: String(stAkhir).toUpperCase()
         };
       });
+
+      // Filter untuk absensi hari ini & simpan riwayat lengkap
+      fetchedTodayAttendance = parsedAll.filter(a => a.tanggal === targetDateStr);
+      fetchedAttendanceHistory = parsedAll;
+
+      // Simpan riwayat lengkap ke IndexedDB lokal untuk penggunaan offline
+      if (db) {
+        const tx = db.transaction("attendance_history", "readwrite");
+        const store = tx.objectStore("attendance_history");
+        parsedAll.forEach(rec => store.put(rec));
+      }
     } else {
       fetchedTodayAttendance = [];
+      fetchedAttendanceHistory = [];
     }
 
     updateMonitoringDashboard();
     renderDashboardView();
+
+    // Refresh tampilan Tindak Lanjut jika fungsi tersedia
+    if (typeof renderTindakLanjutView === 'function') {
+      renderTindakLanjutView();
+    }
 
   } catch (e) {
     console.error("Gagal memuat data dari Server:", e);
@@ -179,18 +212,4 @@ async function syncQueueToGAS() {
     console.error("Gagal sinkron ke Server:", e);
     alert("Terjadi kesalahan saat pengiriman data.");
   }
-}
-// Unduh data tindak lanjut tersimpan dari Supabase
-const { data: tlData } = await supabaseClient.from('tindak_lanjut').select('*');
-if (tlData && Array.isArray(tlData)) {
-  const tlStore = {};
-  tlData.forEach(item => {
-    const idS = item.ID_SISWA || item.id_siswa;
-    tlStore[idS] = {
-      tanggal: item.TANGGAL || item.tanggal,
-      catatan: item.CATATAN || item.catatan,
-      kategori: item.KATEGORI || item.kategori
-    };
-  });
-  localStorage.setItem("TL_STATUS_STORE", JSON.stringify(tlStore));
 }
