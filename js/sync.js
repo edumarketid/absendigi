@@ -1,168 +1,196 @@
-async function renderTindakLanjutView() {
-  const container = document.getElementById('tindak-lanjut-list-container');
-  const classFilterEl = document.getElementById('tl-filter-class');
-  const selectedClassFilter = classFilterEl ? classFilterEl.value : "ALL";
-
-  if (!container) return;
-  container.innerHTML = `<div class="text-center py-6 text-xs text-gray-400 font-bold"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Menganalisis riwayat absensi siswa...</div>`;
-
-  let allHistory = [];
-  let tlStore = {};
-
-  // Unduh riwayat absensi langsung dari Supabase khusus untuk Tindak Lanjut
-  if (navigator.onLine && typeof supabaseClient !== 'undefined') {
-    try {
-      const { data: serverAbsensi } = await supabaseClient.from('absensi_harian').select('*');
-      if (serverAbsensi && Array.isArray(serverAbsensi)) {
-        allHistory = serverAbsensi.map(a => ({
-          tanggal: formatCleanDateLocal(a.TANGGAL || a.tanggal),
-          id_siswa: String(a.ID_SISWA || a.id_siswa).trim(),
-          status_pagi: String(a.STATUS_PAGI || a.status_pagi || "").toUpperCase(),
-          status_akhir: String(a.STATUS_AKHIR || a.status_akhir || a.STATUS_PRESENSI || "").toUpperCase(),
-          status_presensi: String(a.STATUS_AKHIR || a.status_akhir || a.STATUS_PRESENSI || "").toUpperCase()
-        }));
-      }
-
-      const { data: serverTL } = await supabaseClient.from('tindak_lanjut').select('*');
-      if (serverTL && Array.isArray(serverTL)) {
-        serverTL.forEach(item => {
-          const idS = item.ID_SISWA || item.id_siswa;
-          tlStore[idS] = {
-            tanggal: item.TANGGAL || item.tanggal,
-            catatan: item.CATATAN || item.catatan,
-            kategori: item.KATEGORI || item.kategori
-          };
-        });
-        localStorage.setItem("TL_STATUS_STORE", JSON.stringify(tlStore));
-      }
-    } catch (e) {
-      console.error("Gagal memuat data Tindak Lanjut dari Supabase:", e);
-      allHistory = [...fetchedTodayAttendance, ...fetchedAttendanceHistory, ...(await getAllLocalHistoryFromDB())];
-      tlStore = getLocalTLStatusList();
-    }
-  } else {
-    allHistory = [...fetchedTodayAttendance, ...fetchedAttendanceHistory, ...(await getAllLocalHistoryFromDB())];
-    tlStore = getLocalTLStatusList();
-  }
-
-  const activeStudents = cachedStudents.filter(s => s.active === undefined || s.active === true);
-  const filteredByClassStudents = activeStudents.filter(s => selectedClassFilter === "ALL" || s.kelas === selectedClassFilter);
-
-  const detectedList = [];
-
-  filteredByClassStudents.forEach(std => {
-    const idS = String(std.id_siswa).trim().toUpperCase();
-    const stdRecords = allHistory.filter(r => String(r.id_siswa).trim().toUpperCase() === idS);
-    stdRecords.sort((a,b) => String(a.tanggal).localeCompare(String(b.tanggal)));
-
-    // Deteksi Akumulasi Alpa
-    let totalAlpa = 0;
-    stdRecords.forEach(r => {
-      const stAkhir = String(r.status_akhir || r.status_presensi || "").trim().toUpperCase();
-      if (stAkhir === "ALPA" || stAkhir === "ALPHA" || stAkhir === "A") totalAlpa++;
-    });
-
-    // Deteksi Terlambat Berturut-turut
-    let maxSeqTerlambat = 0, currentSeqTerlambat = 0;
-    stdRecords.forEach(r => {
-      const stPagi = String(r.status_pagi || "").trim().toUpperCase();
-      if (stPagi === "TERLAMBAT") {
-        currentSeqTerlambat++;
-        if (currentSeqTerlambat > maxSeqTerlambat) maxSeqTerlambat = currentSeqTerlambat;
-      } else if (stPagi === "HADIR") {
-        currentSeqTerlambat = 0;
-      }
-    });
-
-    // Deteksi Bolos Berturut-turut
-    let maxSeqBolos = 0, currentSeqBolos = 0;
-    stdRecords.forEach(r => {
-      const stAkhir = String(r.status_akhir || r.status_presensi || "").trim().toUpperCase();
-      if (stAkhir === "BOLOS") {
-        currentSeqBolos++;
-        if (currentSeqBolos > maxSeqBolos) maxSeqBolos = currentSeqBolos;
-      } else if (stAkhir !== "") {
-        currentSeqBolos = 0;
-      }
-    });
-
-    const categories = [];
-    if (totalAlpa >= 3) categories.push(`Akumulasi ${totalAlpa}x Alpa`);
-    if (maxSeqTerlambat >= 3) categories.push(`3x Terlambat Berturut-turut`);
-    if (maxSeqBolos >= 3) categories.push(`3x Bolos Berturut-turut`);
-
-    if (categories.length > 0) {
-      detectedList.push({
-        student: std,
-        categories: categories,
-        categoryText: categories.join(", "),
-        isDone: !!tlStore[std.id_siswa],
-        savedInfo: tlStore[std.id_siswa] || null
-      });
-    }
-  });
-
-  const pendingItems = detectedList.filter(item => !item.isDone);
-  const doneItems = detectedList.filter(item => item.isDone);
-
-  const pBadge = document.getElementById("tl-count-pending");
-  const dBadge = document.getElementById("tl-count-done");
-  if (pBadge) pBadge.innerText = pendingItems.length;
-  if (dBadge) dBadge.innerText = doneItems.length;
-
-  const activeItems = (currentTLTab === "pending") ? pendingItems : doneItems;
-
-  if (activeItems.length === 0) {
-    container.innerHTML = `
-      <div class="bg-white p-6 rounded-2xl border border-gray-200 text-center text-xs text-gray-500 space-y-1">
-        <i class="fa-solid fa-circle-check text-2xl ${currentTLTab === 'pending' ? 'text-emerald-500' : 'text-gray-300'}"></i>
-        <p class="font-bold text-gray-700">${currentTLTab === 'pending' ? 'Tidak Ada Siswa Perlu Penanganan' : 'Belum Ada Siswa Selesai Ditindak'}</p>
-        <p class="text-[10px] text-gray-400">${currentTLTab === 'pending' ? 'Seluruh siswa aman dari kriteria pelanggaran.' : 'Siswa yang sudah ditindaklanjuti akan muncul di sini.'}</p>
-      </div>
-    `;
+async function autoDownloadMasterStudents(targetDateStr) {
+  if (!navigator.onLine) {
+    loadLocalHistoryToMemory();
     return;
   }
 
-  container.innerHTML = activeItems.map(item => {
-    const std = item.student;
-    const isDone = item.isDone;
-    const info = item.savedInfo;
+  if (!targetDateStr) {
+    const d = new Date();
+    const realToday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const monDate = document.getElementById("monitoring-date-filter") ? document.getElementById("monitoring-date-filter").value : "";
+    const dashDate = document.getElementById("dashboard-date-filter") ? document.getElementById("dashboard-date-filter").value : "";
+    targetDateStr = formatCleanDateLocal(monDate || dashDate || realToday);
+  } else {
+    targetDateStr = formatCleanDateLocal(targetDateStr);
+  }
 
-    return `
-      <div class="bg-white p-3.5 rounded-2xl border ${isDone ? 'border-emerald-200 bg-emerald-50/20' : 'border-rose-200 shadow-sm'} space-y-2">
-        <div class="flex items-start justify-between gap-2">
-          <div>
-            <h4 class="font-bold text-xs text-gray-900">${std.nama}</h4>
-            <p class="text-[10px] text-gray-500">Kelas: <b>${std.kelas}</b> | ID: ${std.id_siswa}</p>
-          </div>
-          <span class="text-[9px] font-extrabold px-2 py-0.5 rounded-md ${isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
-            ${isDone ? 'Sudah Ditindak' : 'Perlu Penanganan'}
-          </span>
-        </div>
+  try {
+    const { data: studentsData } = await supabaseClient.from('siswa').select('*');
+    const { data: attendanceData } = await supabaseClient
+      .from('absensi_harian')
+      .select('*')
+      .eq('TANGGAL', targetDateStr);
 
-        <div class="p-2 rounded-xl text-xs font-semibold ${isDone ? 'bg-emerald-50 text-emerald-900 border border-emerald-100' : 'bg-rose-50 text-rose-900 border border-rose-100'}">
-          <i class="fa-solid fa-triangle-exclamation text-[10px] mr-1"></i> Pelanggaran: ${item.categoryText}
-        </div>
+    const { data: timeData } = await supabaseClient.from('pengaturan_waktu').select('*');
+    if (timeData && Array.isArray(timeData)) {
+      const timeObj = {};
+      timeData.forEach(t => {
+        const k = t.kunci_waktu || t.KUNCI_WAKTU;
+        const v = t.nilai || t.NILAI;
+        if (k) timeObj[k] = v;
+      });
+      applyTimeSettingsFromCloud(timeObj);
+    }
 
-        ${isDone ? `
-          <div class="bg-gray-50 p-2 rounded-xl text-[11px] text-gray-700 border border-gray-200 space-y-0.5">
-            <p><b>Catatan Tindakan:</b> ${info.catatan || '-'}</p>
-            <p class="text-[9px] text-gray-400">Ditangani tgl: ${info.tanggal}</p>
-          </div>
-        ` : ''}
+    const { data: configData } = await supabaseClient.from('pengaturan').select('*');
+    if (configData && Array.isArray(configData)) {
+      const cfgMap = {};
+      configData.forEach(c => {
+        const k = c.kunci || c.KUNCI;
+        const v = c.nilai || c.NILAI;
+        if (k) cfgMap[k] = v;
+      });
+      const schoolName = cfgMap.SCHOOL_NAME || "SMK Negeri 1 Wakatobi";
+      const academicYear = cfgMap.ACADEMIC_YEAR || "2025/2026";
+      localStorage.setItem("SCHOOL_NAME", schoolName);
+      localStorage.setItem("ACADEMIC_YEAR", academicYear);
+      const headerEl = document.getElementById("app-header-school-name");
+      if (headerEl) headerEl.innerText = `${schoolName} (${academicYear})`;
+    }
 
-        <div class="pt-1 flex justify-end items-center gap-2 border-t border-gray-100">
-          ${!isDone ? `
-            <button onclick="openTLActionModal('${std.id_siswa}', '${std.nama}', '${item.categoryText}')" class="px-3 py-1.5 bg-rose-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-rose-700 active:scale-95 transition flex items-center gap-1.5">
-              <i class="fa-solid fa-user-shield"></i> Tindak Lanjut
-            </button>
-          ` : `
-            <button onclick="reopenTLStatus('${std.id_siswa}')" class="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[10px] rounded-lg hover:bg-amber-100 transition flex items-center gap-1">
-              <i class="fa-solid fa-arrow-rotate-left"></i> Buka Kembali
-            </button>
-          `}
-        </div>
-      </div>
-    `;
-  }).join('');
+    if (studentsData && Array.isArray(studentsData)) {
+      const normalizedStudents = studentsData.map(s => {
+        const id = s.ID_SISWA || s.id_siswa;
+        const nisnVal = s.NISN || s.nisn || "-";
+        const namaVal = s.NAMA_SISWA || s.nama || s.nama_siswa || "";
+        const kelasVal = s.KELAS || s.kelas || "";
+        const ttlVal = s.TTL || s.ttl || "-";
+        const statusVal = s.STATUS || s.status;
+        let activeBool = true;
+
+        if (statusVal !== undefined && statusVal !== null) {
+          activeBool = (statusVal === 'Aktif' || statusVal === true || String(statusVal).toLowerCase() === 'true');
+        } else if (s.active !== undefined) {
+          activeBool = parseBool(s.active, true);
+        }
+
+        return {
+          id_siswa: String(id).trim(),
+          nisn: String(nisnVal).trim(),
+          nama: String(namaVal).trim(),
+          kelas: String(kelasVal).trim(),
+          ttl: String(ttlVal).trim(),
+          active: activeBool
+        };
+      }).filter(s => s.id_siswa);
+
+      if (db) {
+        const tx = db.transaction("students", "readwrite");
+        const store = tx.objectStore("students");
+        store.clear();
+        normalizedStudents.forEach(s => store.put(s));
+        tx.oncomplete = () => {
+          loadStudentsView();
+        };
+      }
+    }
+
+    if (attendanceData && Array.isArray(attendanceData)) {
+      fetchedTodayAttendance = attendanceData.map(a => {
+        const tgl = formatCleanDateLocal(a.TANGGAL || a.tanggal || targetDateStr);
+        const idS = a.ID_SISWA || a.id_siswa;
+        const logId = a.LOG_ID || a.log_id || `${tgl}_${idS}`;
+        const stAkhir = a.STATUS_AKHIR || a.status_akhir || a.STATUS_PRESENSI || a.status_presensi || "HADIR";
+
+        return {
+          queue_id: String(logId),
+          tanggal: tgl,
+          id_siswa: String(idS).trim(),
+          nama: a.NAMA_SISWA || a.nama || "",
+          kelas: a.KELAS || a.kelas || "",
+          jam_pagi: a.JAM_PAGI || a.jam_pagi || "",
+          status_pagi: a.STATUS_PAGI || a.status_pagi || "",
+          jam_siang: a.JAM_SIANG || a.jam_siang || "",
+          status_siang: a.STATUS_SIANG || a.status_siang || "",
+          status_akhir: String(stAkhir).toUpperCase(),
+          status_presensi: String(stAkhir).toUpperCase()
+        };
+      });
+    } else {
+      fetchedTodayAttendance = [];
+    }
+
+    updateMonitoringDashboard();
+    renderDashboardView();
+
+  } catch (e) {
+    console.error("Gagal memuat data dari Server:", e);
+    loadLocalHistoryToMemory();
+  }
+}
+
+async function triggerManualSync() {
+  if (!navigator.onLine) {
+    alert("Perangkat sedang Offline. Pastikan koneksi internet terhubung untuk mengirim antrean!");
+    return;
+  }
+  
+  const btnSync = document.getElementById("btn-manual-sync");
+  const originalHTML = btnSync.innerHTML;
+  
+  btnSync.disabled = true;
+  btnSync.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-[10px]"></i><span>Mengirim...</span>`;
+  
+  await syncQueueToGAS();
+  
+  btnSync.disabled = false;
+  btnSync.innerHTML = originalHTML;
+}
+
+async function syncQueueToGAS() {
+  const queueData = await getAllQueueFromDB();
+  const infoEl = document.getElementById("sync-info-text");
+  if (queueData.length === 0) {
+    if (infoEl) infoEl.innerText = "Antrean kosong (semua data tersimpan).";
+    return;
+  }
+
+  try {
+    const payload = queueData.map(q => ({
+      LOG_ID: `${q.tanggal}-${q.id_siswa}`,
+      TANGGAL: q.tanggal,
+      ID_SISWA: q.id_siswa,
+      NAMA_SISWA: q.nama,
+      KELAS: q.kelas,
+      JAM_PAGI: q.jam_pagi || (q.sesi === "PAGI" ? q.jam : null),
+      STATUS_PAGI: q.status_pagi || (q.sesi === "PAGI" ? q.status_presensi : null),
+      JAM_SIANG: q.jam_siang || (q.sesi === "SIANG" ? q.jam : null),
+      STATUS_SIANG: q.status_siang || (q.sesi === "SIANG" ? q.status_presensi : null),
+      STATUS_AKHIR: q.status_akhir || q.status_presensi
+    }));
+
+    const { error } = await supabaseClient.from('absensi_harian').upsert(payload, { onConflict: 'LOG_ID' });
+
+    if (!error) {
+      const tx = db.transaction("attendance_queue", "readwrite");
+      const store = tx.objectStore("attendance_queue");
+      queueData.forEach(q => store.delete(q.queue_id));
+      
+      tx.oncomplete = () => {
+        updateQueueCountUI();
+        if (infoEl) infoEl.innerText = "Berhasil terkirim ke Server!";
+      };
+    } else {
+      console.error("Server Error:", error);
+      alert("Gagal mengirim ke Server: " + error.message);
+      if (infoEl) infoEl.innerText = "Gagal sinkron. Cek RLS / Koneksi.";
+    }
+  } catch (e) {
+    console.error("Gagal sinkron ke Server:", e);
+    alert("Terjadi kesalahan saat pengiriman data.");
+  }
+}
+// Unduh data tindak lanjut tersimpan dari Supabase
+const { data: tlData } = await supabaseClient.from('tindak_lanjut').select('*');
+if (tlData && Array.isArray(tlData)) {
+  const tlStore = {};
+  tlData.forEach(item => {
+    const idS = item.ID_SISWA || item.id_siswa;
+    tlStore[idS] = {
+      tanggal: item.TANGGAL || item.tanggal,
+      catatan: item.CATATAN || item.catatan,
+      kategori: item.KATEGORI || item.kategori
+    };
+  });
+  localStorage.setItem("TL_STATUS_STORE", JSON.stringify(tlStore));
 }
