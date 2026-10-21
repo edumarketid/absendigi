@@ -175,8 +175,8 @@ function renderMenuModalGrid() {
   const isAdmin = (currentUserRole === "ADMIN");
 
   const items = [
-    { label: "Ibadah Siswa", icon: "fa-mosque", color: "emerald", action: "window.open('https://mengaji.smknegeri1wakatobi.sch.id', '_blank')", adminOnly: false },
-        { label: "Absensi Guru", icon: "fa-chalkboard-user", color: "blue", action: "window.open('https://s.id/AbsensiGuruSMKN1Wakatobi', '_blank')", adminOnly: false },
+	{ label: "Ibadah Siswa", icon: "fa-mosque", color: "emerald", action: "window.open('https://mengaji.smknegeri1wakatobi.sch.id', '_blank')", adminOnly: false },
+    { label: "Absensi Guru", icon: "fa-chalkboard-user", color: "blue", action: "window.open('https://s.id/AbsensiGuruSMKN1Wakatobi', '_blank')", adminOnly: false },
     { label: "Unggah Kolektif", icon: "fa-file-excel", color: "emerald", action: "toggleView('upload-batch')", adminOnly: true },
     { label: "Tambah Siswa", icon: "fa-user-plus", color: "teal", action: "toggleAddStudentModal()", adminOnly: true },
     { label: "Edit Data Siswa", icon: "fa-user-pen", color: "indigo", action: "toggleView('edit-students')", adminOnly: true },
@@ -1495,6 +1495,13 @@ async function setManualPresensiAction(idSiswa, status, targetDate) {
 
   if (navigator.onLine) syncQueueToGAS();
 }
+if (selectedSessionFilter === "DZUHUR") {
+  jamDzuhur = timeStr;
+  statusDzuhur = status; // BISA: HADIR, IZIN, SAKIT, KEGIATAN, ALPA
+} else if (selectedSessionFilter === "PENGAJIAN") {
+  jamPengajian = timeStr;
+  statusPengajian = status; // BISA: HADIR, IZIN, SAKIT, KEGIATAN, ALPA
+}
 
 function renderPieChart(hadir, terlambat, alpa, sakit, izin, kegiatan, totalStudentsCount) {
   const ctx = document.getElementById('attendancePieChart').getContext('2d');
@@ -2142,6 +2149,13 @@ async function onScanSuccess(text) {
       alert("Siswa tidak ditemukan!");
       setTimeout(() => { isProcessingScan = false; }, 1500);
     }
+	if (currentScanSession === "DZUHUR") {
+  jamDzuhur = timeStr;
+  statusDzuhur = "HADIR"; // Langsung Hadir tanpa cek keterlambatan
+} else if (currentScanSession === "PENGAJIAN") {
+  jamPengajian = timeStr;
+  statusPengajian = "HADIR"; // Langsung Hadir tanpa cek keterlambatan
+}
   };
 }
 
@@ -2291,3 +2305,20 @@ window.onload = async () => {
   
   refreshRealtimeSessionUI();
 };
+const payload = queueData.map(q => ({
+  LOG_ID: `${q.tanggal}-${q.id_siswa}`,
+  TANGGAL: q.tanggal,
+  ID_SISWA: q.id_siswa,
+  NAMA_SISWA: q.nama,
+  KELAS: q.kelas,
+  JAM_PAGI: q.jam_pagi || (q.sesi === "PAGI" ? q.jam : null),
+  STATUS_PAGI: q.status_pagi || (q.sesi === "PAGI" ? q.status_presensi : null),
+  JAM_SIANG: q.jam_siang || (q.sesi === "SIANG" ? q.jam : null),
+  STATUS_SIANG: q.status_siang || (q.sesi === "SIANG" ? q.status_presensi : null),
+  // Tambahan untuk Dzuhur dan Pengajian
+  JAM_DZUHUR: q.jam_dzuhur || (q.sesi === "DZUHUR" ? q.jam : null),
+  STATUS_DZUHUR: q.status_dzuhur || (q.sesi === "DZUHUR" ? q.status_presensi : null),
+  JAM_PENGAJIAN: q.jam_pengajian || (q.sesi === "PENGAJIAN" ? q.jam : null),
+  STATUS_PENGAJIAN: q.status_pengajian || (q.sesi === "PENGAJIAN" ? q.status_presensi : null),
+  STATUS_AKHIR: q.status_akhir || q.status_presensi
+}));
