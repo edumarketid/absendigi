@@ -16,11 +16,10 @@ async function autoDownloadMasterStudents(targetDateStr) {
 
   try {
     const { data: studentsData } = await supabaseClient.from('siswa').select('*');
-    const { data: attendanceData } = await supabaseClient
+    const { data: allAttendanceData } = await supabaseClient
       .from('absensi_harian')
-      .select('*')
-      .eq('TANGGAL', targetDateStr);
-
+      .select('*');
+      
     const { data: timeData } = await supabaseClient.from('pengaturan_waktu').select('*');
     if (timeData && Array.isArray(timeData)) {
       const timeObj = {};
@@ -85,8 +84,8 @@ async function autoDownloadMasterStudents(targetDateStr) {
       }
     }
 
-    if (attendanceData && Array.isArray(attendanceData)) {
-      fetchedTodayAttendance = attendanceData.map(a => {
+    if (allAttendanceData && Array.isArray(allAttendanceData)) {
+      const parsedAll = allAttendanceData.map(a => {
         const tgl = formatCleanDateLocal(a.TANGGAL || a.tanggal || targetDateStr);
         const idS = a.ID_SISWA || a.id_siswa;
         const logId = a.LOG_ID || a.log_id || `${tgl}_${idS}`;
@@ -106,8 +105,17 @@ async function autoDownloadMasterStudents(targetDateStr) {
           status_presensi: String(stAkhir).toUpperCase()
         };
       });
+	  fetchedTodayAttendance = parsedAll.filter(a => a.tanggal === targetDateStr);
+  fetchedAttendanceHistory = parsedAll;
+
+  if (db) {
+    const tx = db.transaction("attendance_history", "readwrite");
+    const store = tx.objectStore("attendance_history");
+    parsedAll.forEach(rec => store.put(rec));
+  }
     } else {
       fetchedTodayAttendance = [];
+	  fetchedAttendanceHistory = [];
     }
 
     updateMonitoringDashboard();
