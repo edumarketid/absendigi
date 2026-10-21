@@ -759,3 +759,53 @@ function reopenTLStatus(idSiswa) {
     renderTindakLanjutView();
   }
 }
+// SIMPAN KE SUPABASE & LOCAL
+async function confirmSaveTLAction() {
+  const idSiswa = document.getElementById('tl-modal-id-siswa').value;
+  const catatan = document.getElementById('tl-modal-catatan').value.trim();
+  const kategoriText = document.getElementById('tl-modal-kategori-text').value;
+
+  if (!catatan) return alert("Isi catatan penanganan terlebih dahulu!");
+
+  const d = new Date();
+  const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const tlData = {
+    ID_SISWA: idSiswa,
+    TANGGAL: todayStr,
+    CATATAN: catatan,
+    KATEGORI: kategoriText
+  };
+
+  // Simpan lokal
+  saveLocalTLStatus(idSiswa, { tanggal: todayStr, catatan: catatan, kategori: kategoriText });
+
+  // Simpan online ke Supabase
+  if (navigator.onLine) {
+    try {
+      await supabaseClient.from('tindak_lanjut').upsert([tlData]);
+    } catch (e) {
+      console.error("Gagal simpan TL ke Supabase:", e);
+    }
+  }
+
+  closeTLActionModal();
+  renderTindakLanjutView();
+}
+
+// BUKA KEMBALI / HAPUS DARI SUPABASE & LOCAL
+async function reopenTLStatus(idSiswa) {
+  if (confirm("Yakin ingin membatalkan status penanganan dan mengembalikan ke daftar 'Perlu Penanganan'?")) {
+    removeLocalTLStatus(idSiswa);
+
+    if (navigator.onLine) {
+      try {
+        await supabaseClient.from('tindak_lanjut').delete().eq('ID_SISWA', idSiswa);
+      } catch (e) {
+        console.error("Gagal hapus TL di Supabase:", e);
+      }
+    }
+
+    renderTindakLanjutView();
+  }
+}

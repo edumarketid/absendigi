@@ -180,3 +180,18 @@ async function syncQueueToGAS() {
     alert("Terjadi kesalahan saat pengiriman data.");
   }
 }
+// Tambahkan perintah ini di dalam fungsi autoDownloadMasterStudents() di sync.js
+const { data: tlData } = await supabaseClient.from('tindak_lanjut').select('*');
+
+if (tlData && Array.isArray(tlData)) {
+  const tlStore = {};
+  tlData.forEach(item => {
+    tlStore[item.ID_SISWA] = {
+      tanggal: item.TANGGAL,
+      catatan: item.CATATAN,
+      kategori: item.KATEGORI
+    };
+  });
+  // Simpan data tersinkron ke localStorage lokal
+  localStorage.setItem("TL_STATUS_STORE", JSON.stringify(tlStore));
+}
