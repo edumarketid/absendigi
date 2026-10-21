@@ -180,3 +180,17 @@ async function syncQueueToGAS() {
     alert("Terjadi kesalahan saat pengiriman data.");
   }
 }
+// Unduh data tindak lanjut tersimpan dari Supabase
+const { data: tlData } = await supabaseClient.from('tindak_lanjut').select('*');
+if (tlData && Array.isArray(tlData)) {
+  const tlStore = {};
+  tlData.forEach(item => {
+    const idS = item.ID_SISWA || item.id_siswa;
+    tlStore[idS] = {
+      tanggal: item.TANGGAL || item.tanggal,
+      catatan: item.CATATAN || item.catatan,
+      kategori: item.KATEGORI || item.kategori
+    };
+  });
+  localStorage.setItem("TL_STATUS_STORE", JSON.stringify(tlStore));
+}
