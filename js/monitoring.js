@@ -465,6 +465,12 @@ async function setManualPresensiAction(idSiswa, status, targetDate) {
   ));
   fetchedTodayAttendance.push(record);
 
+  fetchedAttendanceHistory = fetchedAttendanceHistory.filter(r => !(
+    String(r.id_siswa).trim().toUpperCase() === String(idSiswa).trim().toUpperCase() && 
+    formatCleanDateLocal(r.tanggal) === cleanTargetDate
+  ));
+  fetchedAttendanceHistory.push(record);
+
   setTimeout(() => {
     updateMonitoringDashboard();
     renderDashboardView();
@@ -524,6 +530,70 @@ function removeLocalTLStatus(idSiswa) {
   localStorage.setItem("TL_STATUS_STORE", JSON.stringify(store));
 }
 
+// Helper untuk menggabungkan & mendeduplikasi riwayat absensi lintas sumber berdasarkan TANGGAL + ID_SISWA
+async function getMergedDeduplicatedAttendanceHistory() {
+  const localHist = await getAllLocalHistoryFromDB();
+  const queueHist = await getAllQueueFromDB();
+  const combined = [...fetchedAttendanceHistory, ...fetchedTodayAttendance, ...localHist, ...queueHist];
+
+  const uniqueMap = new Map();
+  combined.forEach(r => {
+    const tgl = formatCleanDateLocal(r.tanggal || r.TANGGAL);
+    const idS = String(r.id_siswa || r.ID_SISWA || "").trim().toUpperCase();
+    if (tgl && idS) {
+      uniqueMap.set(`${tgl}_${idS}`, {
+        ...r,
+        tanggal: tgl,
+        id_siswa: idS,
+        status_pagi: String(r.status_pagi || r.STATUS_PAGI || "").trim().toUpperCase(),
+        status_siang: String(r.status_siang || r.STATUS_SIANG || "").trim().toUpperCase(),
+        status_akhir: String(r.status_akhir || r.STATUS_AKHIR || r.status_presensi || "").trim().toUpperCase()
+      });
+    }
+  });
+
+  return Array.from(uniqueMap.values());
+}
+
+// Helper analisis kriteria pelanggaran siswa
+function evaluateStudentViolations(std, allUniqueHistory) {
+  const idS = String(std.id_siswa).trim().toUpperCase();
+  const stdRecords = allUniqueHistory.filter(r => r.id_siswa === idS);
+  stdRecords.sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)));
+
+  let totalAlpa = 0;
+  stdRecords.forEach(r => {
+    if (r.status_akhir === "ALPA") totalAlpa++;
+  });
+
+  let maxSeqTerlambat = 0, currentSeqTerlambat = 0;
+  stdRecords.forEach(r => {
+    if (r.status_pagi === "TERLAMBAT") {
+      currentSeqTerlambat++;
+      if (currentSeqTerlambat > maxSeqTerlambat) maxSeqTerlambat = currentSeqTerlambat;
+    } else if (r.status_pagi === "HADIR") {
+      currentSeqTerlambat = 0;
+    }
+  });
+
+  let maxSeqBolos = 0, currentSeqBolos = 0;
+  stdRecords.forEach(r => {
+    if (r.status_akhir === "BOLOS") {
+      currentSeqBolos++;
+      if (currentSeqBolos > maxSeqBolos) maxSeqBolos = currentSeqBolos;
+    } else if (r.status_akhir !== "") {
+      currentSeqBolos = 0;
+    }
+  });
+
+  const categories = [];
+  if (totalAlpa >= 3) categories.push(`Akumulasi ${totalAlpa}x Alpa`);
+  if (maxSeqTerlambat >= 3) categories.push(`3x Terlambat Berturut-turut`);
+  if (maxSeqBolos >= 3) categories.push(`3x Bolos Berturut-turut`);
+
+  return categories;
+}
+
 async function sendTLClassSummaryWA() {
   const selectedClass = document.getElementById("tl-filter-class").value;
   const schoolName = localStorage.getItem("SCHOOL_NAME") || "Sekolah";
@@ -532,7 +602,7 @@ async function sendTLClassSummaryWA() {
     return alert("Pilih kelas tertentu terlebih dahulu pada filter kelas!");
   }
 
-  const allHistory = [...fetchedTodayAttendance, ...fetchedAttendanceHistory, ...(await getAllLocalHistoryFromDB())];
+  const allHistory = await getMergedDeduplicatedAttendanceHistory();
   const tlStore = getLocalTLStatusList();
   const activeStudents = cachedStudents.filter(s => (s.active === undefined || s.active === true) && s.kelas === selectedClass);
 
@@ -541,43 +611,7 @@ async function sendTLClassSummaryWA() {
   const detectedStudents = [];
 
   activeStudents.forEach(std => {
-    const idS = String(std.id_siswa).trim().toUpperCase();
-    const stdRecords = allHistory.filter(r => String(r.id_siswa).trim().toUpperCase() === idS);
-    stdRecords.sort((a,b) => String(a.tanggal).localeCompare(String(b.tanggal)));
-
-    let totalAlpa = 0;
-    stdRecords.forEach(r => {
-      const stAkhir = String(r.status_akhir || r.status_presensi || "").trim().toUpperCase();
-      if (stAkhir === "ALPA") totalAlpa++;
-    });
-
-    let maxSeqTerlambat = 0, currentSeqTerlambat = 0;
-    stdRecords.forEach(r => {
-      const stPagi = String(r.status_pagi || "").trim().toUpperCase();
-      if (stPagi === "TERLAMBAT") {
-        currentSeqTerlambat++;
-        if (currentSeqTerlambat > maxSeqTerlambat) maxSeqTerlambat = currentSeqTerlambat;
-      } else if (stPagi === "HADIR") {
-        currentSeqTerlambat = 0;
-      }
-    });
-
-    let maxSeqBolos = 0, currentSeqBolos = 0;
-    stdRecords.forEach(r => {
-      const stAkhir = String(r.status_akhir || r.status_presensi || "").trim().toUpperCase();
-      if (stAkhir === "BOLOS") {
-        currentSeqBolos++;
-        if (currentSeqBolos > maxSeqBolos) maxSeqBolos = currentSeqBolos;
-      } else if (stAkhir !== "") {
-        currentSeqBolos = 0;
-      }
-    });
-
-    const categories = [];
-    if (totalAlpa >= 3) categories.push(`Akumulasi ${totalAlpa}x Alpa`);
-    if (maxSeqTerlambat >= 3) categories.push(`3x Terlambat Berturut-turut`);
-    if (maxSeqBolos >= 3) categories.push(`3x Bolos Berturut-turut`);
-
+    const categories = evaluateStudentViolations(std, allHistory);
     if (categories.length > 0) {
       const isDone = !!tlStore[std.id_siswa];
       detectedStudents.push({ nama: std.nama, kategori: categories.join(", "), status: isDone ? "Sudah Ditindak" : "Perlu Penanganan" });
@@ -601,7 +635,53 @@ async function renderTindakLanjutView() {
 
   container.innerHTML = `<div class="text-center py-6 text-xs text-gray-400 font-bold"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Menganalisis riwayat absensi siswa...</div>`;
 
-  const allHistory = [...fetchedTodayAttendance, ...fetchedAttendanceHistory, ...(await getAllLocalHistoryFromDB())];
+  // Jika online, sinkronkan dulu riwayat absensi penuh & data tindak_lanjut terbaru dari Supabase
+  if (navigator.onLine) {
+    try {
+      const { data: fullHistData } = await supabaseClient.from('absensi_harian').select('*');
+      if (fullHistData && Array.isArray(fullHistData)) {
+        fetchedAttendanceHistory = fullHistData.map(a => {
+          const tgl = formatCleanDateLocal(a.TANGGAL || a.tanggal);
+          const idS = String(a.ID_SISWA || a.id_siswa || "").trim();
+          const logId = a.LOG_ID || a.log_id || `${tgl}_${idS}`;
+          const stAkhir = a.STATUS_AKHIR || a.status_akhir || "HADIR";
+          return {
+            queue_id: String(logId),
+            tanggal: tgl,
+            id_siswa: idS,
+            nama: a.NAMA_SISWA || a.nama || "",
+            kelas: a.KELAS || a.kelas || "",
+            jam_pagi: a.JAM_PAGI || a.jam_pagi || "",
+            status_pagi: a.STATUS_PAGI || a.status_pagi || "",
+            jam_siang: a.JAM_SIANG || a.jam_siang || "",
+            status_siang: a.STATUS_SIANG || a.status_siang || "",
+            status_akhir: String(stAkhir).toUpperCase(),
+            status_presensi: String(stAkhir).toUpperCase()
+          };
+        });
+      }
+
+      const { data: tlCloudData } = await supabaseClient.from('tindak_lanjut').select('*');
+      if (tlCloudData && Array.isArray(tlCloudData)) {
+        const cloudStore = {};
+        tlCloudData.forEach(row => {
+          const idS = String(row.ID_SISWA || row.id_siswa || "").trim();
+          if (idS) {
+            cloudStore[idS] = {
+              tanggal: row.TANGGAL || row.tanggal || "",
+              catatan: row.CATATAN || row.catatan || "",
+              kategori: row.KATEGORI || row.kategori || ""
+            };
+          }
+        });
+        localStorage.setItem("TL_STATUS_STORE", JSON.stringify(cloudStore));
+      }
+    } catch (e) {
+      console.warn("Menggunakan cache lokal untuk Tindak Lanjut:", e);
+    }
+  }
+
+  const allHistory = await getMergedDeduplicatedAttendanceHistory();
   const tlStore = getLocalTLStatusList();
 
   const activeStudents = cachedStudents.filter(s => s.active === undefined || s.active === true);
@@ -610,48 +690,18 @@ async function renderTindakLanjutView() {
   const detectedList = [];
 
   filteredByClassStudents.forEach(std => {
-    const idS = String(std.id_siswa).trim().toUpperCase();
-    const stdRecords = allHistory.filter(r => String(r.id_siswa).trim().toUpperCase() === idS);
-    stdRecords.sort((a,b) => String(a.tanggal).localeCompare(String(b.tanggal)));
+    const categories = evaluateStudentViolations(std, allHistory);
 
-    let totalAlpa = 0;
-    stdRecords.forEach(r => {
-      const stAkhir = String(r.status_akhir || r.status_presensi || "").trim().toUpperCase();
-      if (stAkhir === "ALPA") totalAlpa++;
-    });
+    // Tampilkan siswa jika terdeteksi melanggar ATAU sudah pernah memiliki catatan di tabel tindak_lanjut
+    if (categories.length > 0 || tlStore[std.id_siswa]) {
+      const displayCategory = categories.length > 0
+        ? categories.join(", ")
+        : (tlStore[std.id_siswa]?.kategori || "Riwayat Tindak Lanjut");
 
-    let maxSeqTerlambat = 0, currentSeqTerlambat = 0;
-    stdRecords.forEach(r => {
-      const stPagi = String(r.status_pagi || "").trim().toUpperCase();
-      if (stPagi === "TERLAMBAT") {
-        currentSeqTerlambat++;
-        if (currentSeqTerlambat > maxSeqTerlambat) maxSeqTerlambat = currentSeqTerlambat;
-      } else if (stPagi === "HADIR") {
-        currentSeqTerlambat = 0;
-      }
-    });
-
-    let maxSeqBolos = 0, currentSeqBolos = 0;
-    stdRecords.forEach(r => {
-      const stAkhir = String(r.status_akhir || r.status_presensi || "").trim().toUpperCase();
-      if (stAkhir === "BOLOS") {
-        currentSeqBolos++;
-        if (currentSeqBolos > maxSeqBolos) maxSeqBolos = currentSeqBolos;
-      } else if (stAkhir !== "") {
-        currentSeqBolos = 0;
-      }
-    });
-
-    const categories = [];
-    if (totalAlpa >= 3) categories.push(`Akumulasi ${totalAlpa}x Alpa`);
-    if (maxSeqTerlambat >= 3) categories.push(`3x Terlambat Berturut-turut`);
-    if (maxSeqBolos >= 3) categories.push(`3x Bolos Berturut-turut`);
-
-    if (categories.length > 0) {
       detectedList.push({
         student: std,
         categories: categories,
-        categoryText: categories.join(", "),
+        categoryText: displayCategory,
         isDone: !!tlStore[std.id_siswa],
         savedInfo: tlStore[std.id_siswa] || null
       });
@@ -707,7 +757,7 @@ async function renderTindakLanjutView() {
 
         <div class="pt-1 flex justify-end items-center gap-2 border-t border-gray-100">
           ${!isDone ? `
-            <button onclick="openTLActionModal('${std.id_siswa}', '${std.nama}', '${item.categoryText}')" class="px-3 py-1.5 bg-rose-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-rose-700 active:scale-95 transition flex items-center gap-1.5">
+            <button onclick="openTLActionModal('${std.id_siswa}', '${std.nama.replace(/'/g, "\\'")}', '${item.categoryText.replace(/'/g, "\\'")}')" class="px-3 py-1.5 bg-rose-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-rose-700 active:scale-95 transition flex items-center gap-1.5">
               <i class="fa-solid fa-user-shield"></i> Tindak Lanjut
             </button>
           ` : `
@@ -733,10 +783,10 @@ function closeTLActionModal() {
   document.getElementById('tl-action-modal').classList.add('hidden');
 }
 
-function confirmSaveTLAction() {
-  const idSiswa = document.getElementById('tl-modal-id-siswa').value;
+async function confirmSaveTLAction() {
+  const idSiswa = document.getElementById('tl-modal-id-siswa').value.trim();
   const catatan = document.getElementById('tl-modal-catatan').value.trim();
-  const kategoriText = document.getElementById('tl-modal-kategori-text').value;
+  const kategoriText = document.getElementById('tl-modal-kategori-text').value.trim();
 
   if (!catatan) return alert("Isi catatan penanganan terlebih dahulu!");
 
@@ -749,13 +799,52 @@ function confirmSaveTLAction() {
     kategori: kategoriText
   });
 
+  if (navigator.onLine) {
+    try {
+      const { error } = await supabaseClient
+        .from('tindak_lanjut')
+        .upsert([{
+          ID_SISWA: idSiswa,
+          TANGGAL: todayStr,
+          CATATAN: catatan,
+          KATEGORI: kategoriText
+        }], { onConflict: 'ID_SISWA' });
+
+      if (error) {
+        alert("Tersimpan di HP, tetapi GAGAL masuk ke database Supabase: " + error.message);
+      } else {
+        alert("Catatan tindak lanjut berhasil disimpan ke Database Server!");
+      }
+    } catch (e) {
+      alert("Catatan tindak lanjut tersimpan secara lokal.");
+    }
+  } else {
+    alert("Perangkat offline. Catatan tindak lanjut tersimpan di HP ini.");
+  }
+
   closeTLActionModal();
   renderTindakLanjutView();
 }
 
-function reopenTLStatus(idSiswa) {
+async function reopenTLStatus(idSiswa) {
   if (confirm("Yakin ingin membatalkan status penanganan dan mengembalikan ke daftar 'Perlu Penanganan'?")) {
     removeLocalTLStatus(idSiswa);
+
+    if (navigator.onLine) {
+      try {
+        const { error } = await supabaseClient
+          .from('tindak_lanjut')
+          .delete()
+          .eq('ID_SISWA', idSiswa);
+
+        if (error) {
+          alert("Status lokal dibuka kembali, tetapi GAGAL menghapus di server: " + error.message);
+        }
+      } catch (e) {
+        console.error("Gagal menghapus tindak_lanjut dari server:", e);
+      }
+    }
+
     renderTindakLanjutView();
   }
 }

@@ -16,13 +16,11 @@ async function autoDownloadMasterStudents(targetDateStr) {
 
   try {
     const { data: studentsData } = await supabaseClient.from('siswa').select('*');
-    const { data: attendanceData } = await supabaseClient
-      .from('absensi_harian')
-      .select('*')
-      .eq('TANGGAL', targetDateStr);
+    const { data: allAttendanceData } = await supabaseClient.from('absensi_harian').select('*');
+    const { data: tlData } = await supabaseClient.from('tindak_lanjut').select('*');
 
     const { data: timeData } = await supabaseClient.from('pengaturan_waktu').select('*');
-    if (timeData && Array.isArray(timeData)) {
+    if (timeData && Array.isArray(timeData) && timeData.length > 0) {
       const timeObj = {};
       timeData.forEach(t => {
         const k = t.kunci_waktu || t.KUNCI_WAKTU;
@@ -33,19 +31,37 @@ async function autoDownloadMasterStudents(targetDateStr) {
     }
 
     const { data: configData } = await supabaseClient.from('pengaturan').select('*');
-    if (configData && Array.isArray(configData)) {
+    if (configData && Array.isArray(configData) && configData.length > 0) {
       const cfgMap = {};
       configData.forEach(c => {
         const k = c.kunci || c.KUNCI;
         const v = c.nilai || c.NILAI;
         if (k) cfgMap[k] = v;
       });
-      const schoolName = cfgMap.SCHOOL_NAME || "SMK Negeri 1 Wakatobi";
-      const academicYear = cfgMap.ACADEMIC_YEAR || "2025/2026";
-      localStorage.setItem("SCHOOL_NAME", schoolName);
-      localStorage.setItem("ACADEMIC_YEAR", academicYear);
-      const headerEl = document.getElementById("app-header-school-name");
-      if (headerEl) headerEl.innerText = `${schoolName} (${academicYear})`;
+
+      const schoolName = cfgMap.SCHOOL_NAME || localStorage.getItem("SCHOOL_NAME") || "";
+      const academicYear = cfgMap.ACADEMIC_YEAR || localStorage.getItem("ACADEMIC_YEAR") || "2026/2027";
+      const principalName = cfgMap.PRINCIPAL_NAME || localStorage.getItem("PRINCIPAL_NAME") || "";
+      const principalNip = cfgMap.PRINCIPAL_NIP || localStorage.getItem("PRINCIPAL_NIP") || "";
+
+      if (schoolName) {
+        localStorage.setItem("SCHOOL_NAME", schoolName);
+        localStorage.setItem("ACADEMIC_YEAR", academicYear);
+        localStorage.setItem("PRINCIPAL_NAME", principalName);
+        localStorage.setItem("PRINCIPAL_NIP", principalNip);
+
+        const headerEl = document.getElementById("app-header-school-name");
+        const nameInput = document.getElementById("input-school-name");
+        const yearInput = document.getElementById("input-academic-year");
+        const prinNameInput = document.getElementById("input-principal-name");
+        const prinNipInput = document.getElementById("input-principal-nip");
+
+        if (headerEl) headerEl.innerText = `${schoolName} (${academicYear})`;
+        if (nameInput) nameInput.value = schoolName;
+        if (yearInput) yearInput.value = academicYear;
+        if (prinNameInput) prinNameInput.value = principalName;
+        if (prinNipInput) prinNipInput.value = principalNip;
+      }
     }
 
     if (studentsData && Array.isArray(studentsData)) {
@@ -85,9 +101,9 @@ async function autoDownloadMasterStudents(targetDateStr) {
       }
     }
 
-    if (attendanceData && Array.isArray(attendanceData)) {
-      fetchedTodayAttendance = attendanceData.map(a => {
-        const tgl = formatCleanDateLocal(a.TANGGAL || a.tanggal || targetDateStr);
+    if (allAttendanceData && Array.isArray(allAttendanceData)) {
+      const normalizedHistory = allAttendanceData.map(a => {
+        const tgl = formatCleanDateLocal(a.TANGGAL || a.tanggal);
         const idS = a.ID_SISWA || a.id_siswa;
         const logId = a.LOG_ID || a.log_id || `${tgl}_${idS}`;
         const stAkhir = a.STATUS_AKHIR || a.status_akhir || a.STATUS_PRESENSI || a.status_presensi || "HADIR";
@@ -106,8 +122,27 @@ async function autoDownloadMasterStudents(targetDateStr) {
           status_presensi: String(stAkhir).toUpperCase()
         };
       });
+
+      fetchedAttendanceHistory = normalizedHistory;
+      fetchedTodayAttendance = normalizedHistory.filter(r => r.tanggal === targetDateStr);
     } else {
+      fetchedAttendanceHistory = [];
       fetchedTodayAttendance = [];
+    }
+
+    if (tlData && Array.isArray(tlData)) {
+      const cloudTLStore = {};
+      tlData.forEach(row => {
+        const idS = String(row.ID_SISWA || row.id_siswa || "").trim();
+        if (idS) {
+          cloudTLStore[idS] = {
+            tanggal: row.TANGGAL || row.tanggal || "",
+            catatan: row.CATATAN || row.catatan || "",
+            kategori: row.KATEGORI || row.kategori || ""
+          };
+        }
+      });
+      localStorage.setItem("TL_STATUS_STORE", JSON.stringify(cloudTLStore));
     }
 
     updateMonitoringDashboard();
